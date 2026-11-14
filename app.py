@@ -1,13 +1,9 @@
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import parse_qs
-from html import escape
-from datetime import datetime
-import csv
-import os
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import webbrowser
+import threading
 
 PORT = 8000
-CSV_FILE = "registrations.csv"
 
 HTML = r"""
 <!DOCTYPE html>
@@ -15,120 +11,155 @@ HTML = r"""
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Neuroflex Education is an English Medium institute in Banasree, Dhaka, offering Pre-O Level, O Level, A Level, PTE and IELTS preparation.">
-<title>Neuroflex Education | Inspire Minds, Empower Futures</title>
+<meta name="description" content="Neuroflex Education, an English Medium Institute in Banasree, Dhaka. O Level, A Level, Pre-O Level, PTE and IELTS preparation.">
+<title>Neuroflex Education | Inspire Minds. Empower Futures.</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
 :root {
-    --navy: #111d45;
-    --blue: #3048a5;
-    --purple: #6653bc;
-    --cyan: #35bbdb;
-    --light: #f5f7ff;
+    --navy: #11254b;
+    --blue: #3459c8;
+    --purple: #7155c7;
+    --cyan: #15b8cc;
+    --light: #f5f8ff;
+    --muted: #68758e;
     --white: #ffffff;
-    --muted: #69748d;
-    --border: #e4e9f5;
-    --gradient: linear-gradient(125deg, #253e9a, #7258c8);
+    --border: #e5eaf5;
+    --shadow: 0 18px 50px rgba(20, 44, 95, .09);
 }
 
-* { box-sizing: border-box; }
+* {
+    box-sizing: border-box;
+}
 
-html { scroll-behavior: smooth; }
+html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 90px;
+}
 
 body {
     margin: 0;
-    font-family: "DM Sans", Arial, sans-serif;
     color: var(--navy);
-    background: var(--white);
-    line-height: 1.65;
+    background: white;
+    font-family: 'DM Sans', Arial, sans-serif;
+    line-height: 1.6;
 }
 
 h1, h2, h3, h4 {
-    font-family: "Outfit", Arial, sans-serif;
-    line-height: 1.18;
+    font-family: 'Outfit', Arial, sans-serif;
+    line-height: 1.15;
     margin-top: 0;
 }
 
-a { text-decoration: none; color: inherit; }
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+button, input, select, textarea {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
 
 .container {
     width: min(1160px, 90%);
     margin: auto;
 }
 
-section { padding: 92px 0; }
-
-.section-head {
-    text-align: center;
-    max-width: 730px;
-    margin: 0 auto 48px;
+.section {
+    padding: 95px 0;
 }
 
-.eyebrow {
-    color: var(--purple);
-    text-transform: uppercase;
+.section-label {
+    color: var(--blue);
     font-size: 13px;
-    letter-spacing: 2px;
     font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
     margin-bottom: 12px;
-    display: inline-block;
 }
 
-.section-head h2 {
-    font-size: clamp(30px, 4vw, 46px);
-    margin-bottom: 15px;
+.section-heading {
+    font-size: clamp(32px, 4vw, 46px);
+    font-weight: 800;
+    margin-bottom: 16px;
+    letter-spacing: -1.4px;
 }
 
-.section-head p { color: var(--muted); margin: 0; }
+.section-desc {
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 650px;
+}
+
+.center {
+    text-align: center;
+}
+
+.center .section-desc {
+    margin: 0 auto;
+}
+
+.gradient-text {
+    background: linear-gradient(110deg, #3459c8, #7953ce);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+}
 
 .btn {
     display: inline-flex;
-    justify-content: center;
     align-items: center;
-    padding: 14px 26px;
-    border-radius: 12px;
-    font-size: 15px;
-    font-weight: 700;
+    justify-content: center;
+    gap: 9px;
     border: 0;
-    cursor: pointer;
-    transition: transform .2s, box-shadow .2s;
+    border-radius: 12px;
+    padding: 14px 23px;
+    font-weight: 800;
+    font-size: 14px;
+    transition: .2s ease;
 }
 
 .btn:hover {
     transform: translateY(-3px);
-    box-shadow: 0 12px 25px #111d4520;
 }
 
 .btn-primary {
     color: white;
-    background: var(--gradient);
-}
-
-.btn-white {
-    color: var(--blue);
-    background: white;
+    background: linear-gradient(120deg, #3158ca, #7658cf);
+    box-shadow: 0 8px 25px rgba(54, 83, 202, .22);
 }
 
 .btn-outline {
-    border: 1px solid #ffffff80;
-    color: white;
-    background: transparent;
+    border: 1.5px solid #a5b2d8;
+    color: var(--navy);
+    background: white;
 }
 
-header {
+.btn-white {
     background: white;
+    color: var(--blue);
+}
+
+/* NAVIGATION */
+
+header {
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 3px 20px #17275310;
+    background: rgba(255,255,255,.97);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(15px);
 }
 
-.nav {
-    min-height: 78px;
+.navbar {
+    min-height: 82px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -141,1002 +172,1303 @@ header {
     gap: 12px;
 }
 
-.logo-icon {
-    width: 48px;
-    height: 48px;
-    display: grid;
-    place-items: center;
-    border-radius: 14px;
-    background: var(--gradient);
+.logo-mark {
+    width: 49px;
+    height: 49px;
+    border-radius: 15px;
+    background: linear-gradient(145deg, #2e59c8, #8253c6);
     color: white;
-    font-size: 27px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 28px;
+    font-weight: 900;
+    font-family: 'Outfit';
 }
 
 .logo-name {
-    font-family: "Outfit", sans-serif;
-    font-size: 21px;
+    font-size: 20px;
     font-weight: 900;
-    line-height: 1.1;
+    line-height: 1.05;
+    font-family: 'Outfit';
 }
 
-.logo-name span { color: var(--purple); }
+.logo-name span {
+    display: block;
+    color: var(--blue);
+}
 
 .logo-tag {
-    display: block;
     font-size: 10px;
     color: var(--muted);
     letter-spacing: 1px;
-    font-weight: 700;
+    text-transform: uppercase;
 }
 
-.nav-links {
+.navlinks {
     display: flex;
     align-items: center;
-    gap: 23px;
+    gap: 27px;
 }
 
-.nav-links a {
+.navlinks a:not(.btn) {
     font-size: 14px;
     font-weight: 700;
 }
 
-.nav-links a:hover { color: var(--purple); }
-
-.nav-links .nav-cta {
-    background: var(--gradient);
-    padding: 11px 18px;
-    color: white;
-    border-radius: 10px;
+.navlinks a:hover {
+    color: var(--blue);
 }
 
-.menu-btn {
+.menu-toggle {
     display: none;
     border: 0;
-    background: none;
-    font-size: 26px;
-    cursor: pointer;
-    color: var(--navy);
+    background: var(--light);
+    padding: 9px 14px;
+    border-radius: 9px;
+    font-size: 23px;
 }
+
+/* HERO */
 
 .hero {
-    background:
-        radial-gradient(circle at 85% 20%, #a49af13a, transparent 35%),
-        linear-gradient(120deg, #101d4b, #273c91 55%, #5d4db5);
-    color: white;
-    padding: 110px 0 95px;
-    position: relative;
     overflow: hidden;
-}
-
-.hero::after {
-    content: "";
-    position: absolute;
-    height: 390px;
-    width: 390px;
-    border: 65px solid #ffffff09;
-    border-radius: 50%;
-    right: -120px;
-    bottom: -230px;
+    background:
+        radial-gradient(circle at 85% 15%, #d8d9ff 0, transparent 32%),
+        linear-gradient(125deg, #f8faff, #edf3ff);
+    padding: 90px 0 100px;
 }
 
 .hero-grid {
     display: grid;
-    grid-template-columns: 1.2fr .8fr;
+    grid-template-columns: 1.05fr .95fr;
     align-items: center;
-    gap: 65px;
-    position: relative;
-    z-index: 1;
+    gap: 55px;
 }
 
-.hero-pill {
+.eyebrow {
     display: inline-block;
-    padding: 9px 17px;
-    border: 1px solid #ffffff55;
-    background: #ffffff14;
+    background: #e4eaff;
+    color: var(--blue);
+    padding: 8px 14px;
     border-radius: 30px;
-    font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 23px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .7px;
 }
 
 .hero h1 {
-    font-size: clamp(46px, 6vw, 76px);
-    letter-spacing: -2px;
-    margin-bottom: 22px;
+    font-size: clamp(44px, 5.5vw, 70px);
+    letter-spacing: -2.7px;
+    margin: 23px 0;
+    font-weight: 900;
 }
 
-.hero h1 span { color: #77ddf5; }
-
 .hero p {
-    color: #e1e5ff;
-    font-size: 18px;
-    max-width: 570px;
-    margin-bottom: 30px;
+    color: var(--muted);
+    max-width: 530px;
+    font-size: 17px;
+    margin-bottom: 27px;
 }
 
 .hero-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 12px;
 }
 
-.hero-panel {
-    padding: 32px;
-    border: 1px solid #ffffff35;
-    border-radius: 28px;
-    background: #ffffff16;
-    backdrop-filter: blur(14px);
-    box-shadow: 0 25px 60px #11152f40;
-}
-
-.hero-panel h3 { font-size: 26px; }
-
-.hero-panel p {
-    font-size: 15px;
-    margin-bottom: 23px;
-}
-
-.hero-feature {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    background: #ffffff17;
-    padding: 16px;
-    border-radius: 13px;
-    margin-top: 12px;
+.hero-note {
+    margin-top: 30px;
+    color: #60708e;
+    font-size: 13px;
     font-weight: 700;
 }
 
-.feature-icon {
-    background: #ffffff20;
-    width: 43px;
-    height: 43px;
-    border-radius: 10px;
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-    font-size: 23px;
+.hero-visual {
+    position: relative;
+    min-height: 425px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.stats {
-    background: #f0f3ff;
-    padding: 28px 0;
+.visual-circle {
+    width: 350px;
+    height: 350px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #597adf, #7655c8);
+    box-shadow: 0 30px 70px rgba(70, 81, 176, .23);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    text-align: center;
-    gap: 20px;
+.visual-circle::before {
+    content: "";
+    position: absolute;
+    width: 390px;
+    height: 390px;
+    border: 2px dashed #b0bce8;
+    border-radius: 50%;
 }
 
-.stat {
-    font-family: "Outfit", sans-serif;
-    font-weight: 800;
-    font-size: 19px;
-    color: var(--blue);
+.book-icon {
+    font-size: 132px;
+    filter: drop-shadow(0 12px 15px rgba(0,0,0,.15));
 }
 
-.stat small {
+.floating-card {
+    position: absolute;
+    background: white;
+    border: 1px solid #edf0fa;
+    border-radius: 16px;
+    padding: 15px 19px;
+    box-shadow: var(--shadow);
+    z-index: 2;
+}
+
+.floating-card strong {
     display: block;
-    font-family: "DM Sans", sans-serif;
+    font-size: 16px;
+}
+
+.floating-card small {
+    display: block;
     font-size: 12px;
-    font-weight: 500;
     color: var(--muted);
 }
 
-.about-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: center;
-    gap: 65px;
+.fc-one {
+    top: 35px;
+    left: 0;
 }
 
-.about-graphic {
-    background: var(--gradient);
-    border-radius: 28px;
-    min-height: 380px;
+.fc-two {
+    right: -5px;
+    bottom: 50px;
+}
+
+.fc-three {
+    left: 20px;
+    bottom: 13px;
+}
+
+/* FEATURES */
+
+.features {
+    margin-top: -48px;
+    position: relative;
+    z-index: 3;
+}
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.feature {
+    padding: 26px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 19px;
+    box-shadow: var(--shadow);
+}
+
+.feature-icon {
+    width: 51px;
+    height: 51px;
+    background: #e9efff;
+    color: var(--blue);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 27px;
+    margin-bottom: 16px;
+}
+
+.feature h3 {
+    font-size: 20px;
+    margin-bottom: 7px;
+}
+
+.feature p {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 0;
+}
+
+/* SUBJECTS */
+
+.subjects-section {
+    background: var(--light);
+}
+
+.subjects-grid {
+    margin-top: 38px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.subject-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 23px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 800;
+    transition: .2s;
+}
+
+.subject-card:hover {
+    border-color: #9aacfc;
+    transform: translateY(-4px);
+    box-shadow: var(--shadow);
+}
+
+.subject-icon {
+    font-size: 25px;
+}
+
+.subject-card span:last-child {
+    font-size: 14px;
+}
+
+/* COURSES */
+
+.courses-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+    margin-top: 39px;
+}
+
+.course-card {
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 30px;
+    transition: .2s;
+    background: white;
+}
+
+.course-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow);
+}
+
+.course-badge {
+    width: 62px;
+    height: 62px;
+    border-radius: 17px;
+    background: linear-gradient(130deg, #e4eaff, #f0eaff);
+    display: grid;
+    place-items: center;
+    font-size: 31px;
+    margin-bottom: 22px;
+}
+
+.course-card h3 {
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+.course-card p {
+    font-size: 14px;
+    color: var(--muted);
+    min-height: 70px;
+}
+
+.course-card a {
+    color: var(--blue);
+    font-weight: 800;
+    font-size: 14px;
+}
+
+.curriculum {
+    margin-top: 30px;
+    padding: 20px 25px;
+    background: #f3f6ff;
+    border-radius: 14px;
+    text-align: center;
+    font-size: 15px;
+}
+
+/* WHY CHOOSE */
+
+.why-section {
+    background: #f7f9ff;
+}
+
+.why-grid {
+    display: grid;
+    grid-template-columns: .85fr 1.15fr;
+    gap: 60px;
+    align-items: center;
+}
+
+.why-art {
+    min-height: 390px;
+    background: linear-gradient(145deg, #355ccc, #7d53c5);
+    border-radius: 29px;
     color: white;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     text-align: center;
     padding: 35px;
 }
 
-.about-graphic .big-symbol {
-    font-size: 95px;
-    line-height: 1.3;
-}
-
-.about-graphic h3 { font-size: 32px; }
-
-.about-graphic p { max-width: 300px; }
-
-.about-copy h2 { font-size: 43px; }
-
-.about-copy p { color: var(--muted); }
-
-.check-list {
-    list-style: none;
-    padding: 0;
-}
-
-.check-list li {
-    display: flex;
-    gap: 12px;
+.why-art .big-icon {
+    font-size: 105px;
     margin-bottom: 15px;
 }
 
-.check-list li::before {
-    content: "✓";
-    color: white;
-    background: #31b7d8;
-    border-radius: 50%;
-    height: 23px;
-    width: 23px;
-    flex-shrink: 0;
+.why-art h3 {
+    font-size: 33px;
+    margin: 0 0 10px;
+}
+
+.why-art p {
+    max-width: 300px;
+    color: #e5eaff;
+}
+
+.why-list {
+    display: grid;
+    gap: 21px;
+    margin-top: 25px;
+}
+
+.why-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.check {
+    background: #e5edff;
+    color: var(--blue);
+    border-radius: 10px;
+    width: 37px;
+    height: 37px;
     display: grid;
     place-items: center;
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 900;
+    flex-shrink: 0;
 }
 
-.bg-light { background: var(--light); }
-
-.card-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 22px;
+.why-item h3 {
+    font-size: 18px;
+    margin-bottom: 5px;
 }
 
-.card {
-    background: white;
-    border: 1px solid var(--border);
-    border-radius: 19px;
-    padding: 29px;
-    transition: .25s;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 20px 35px #17275312;
-}
-
-.card-icon {
-    height: 58px;
-    width: 58px;
-    background: #efedff;
-    display: grid;
-    place-items: center;
-    border-radius: 15px;
-    font-size: 28px;
-    margin-bottom: 20px;
-}
-
-.card h3 { font-size: 22px; margin-bottom: 12px; }
-
-.card p {
+.why-item p {
     color: var(--muted);
     font-size: 14px;
     margin: 0;
 }
 
-.subject-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 15px;
-}
+/* ADMISSION */
 
-.subject {
-    background: white;
-    border: 1px solid var(--border);
-    border-radius: 13px;
-    padding: 19px 17px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    font-size: 15px;
-    font-weight: 700;
-}
-
-.subject span {
-    color: #31b8d8;
-    font-size: 20px;
-}
-
-.subject:hover { border-color: var(--purple); }
-
-.course-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 22px;
-}
-
-.course {
-    background: white;
-    border: 1px solid var(--border);
-    padding: 33px;
-    border-radius: 20px;
-    position: relative;
-    overflow: hidden;
-}
-
-.course::before {
-    content: "";
-    display: block;
-    height: 5px;
-    background: var(--gradient);
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-}
-
-.course h3 {
-    color: var(--blue);
-    font-size: 26px;
-    margin: 15px 0;
-}
-
-.course p {
-    font-size: 14px;
-    color: var(--muted);
-}
-
-.course a {
-    font-weight: 800;
-    color: var(--purple);
-    font-size: 14px;
-}
-
-.course-symbol { font-size: 38px; }
-
-.why-banner {
-    background: var(--gradient);
-    border-radius: 26px;
+.admission {
+    padding: 85px 0;
+    background: linear-gradient(115deg, #244bbd, #7550bb);
     color: white;
-    padding: 48px;
+}
+
+.admission-grid {
     display: grid;
     grid-template-columns: 1fr auto;
+    gap: 40px;
     align-items: center;
-    gap: 25px;
 }
 
-.why-banner h2 {
-    font-size: 36px;
+.admission h2 {
+    font-size: clamp(32px, 4vw, 45px);
     margin-bottom: 10px;
 }
 
-.why-banner p { margin: 0; color: #e5e5ff; }
+.admission p {
+    color: #e3e9ff;
+    margin: 0;
+}
 
-.trial {
-    background: var(--light);
+.admission .offer {
+    display: inline-block;
+    margin-top: 15px;
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    padding: 8px 13px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+/* FORM */
+
+.trial-section {
+    background: #f8faff;
 }
 
 .trial-grid {
     display: grid;
     grid-template-columns: .85fr 1.15fr;
-    gap: 55px;
+    gap: 65px;
     align-items: start;
 }
 
-.trial-copy h2 {
-    font-size: 43px;
+.trial-info {
+    padding-top: 28px;
 }
 
-.trial-copy p { color: var(--muted); }
-
-.trial-offer {
-    padding: 25px;
-    border-radius: 18px;
-    background: var(--gradient);
-    color: white;
+.trial-points {
     margin-top: 30px;
+    display: grid;
+    gap: 16px;
 }
 
-.trial-offer strong {
-    display: block;
-    font-size: 26px;
-    font-family: "Outfit", sans-serif;
+.trial-point {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.trial-point span {
+    color: var(--blue);
+    font-size: 22px;
 }
 
 .form-card {
-    background: white;
     padding: 35px;
     border-radius: 22px;
-    box-shadow: 0 15px 50px #20347512;
+    background: white;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
 }
 
-.form-card h3 { font-size: 28px; }
-
-.form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 17px;
+.form-card h3 {
+    font-size: 25px;
+    margin-bottom: 20px;
 }
 
 .form-group {
-    margin-bottom: 18px;
+    margin-bottom: 17px;
 }
 
 .form-group label {
     display: block;
-    font-size: 13px;
     font-weight: 800;
+    font-size: 13px;
     margin-bottom: 7px;
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
+    display: block;
     width: 100%;
-    border: 1px solid #dce1ef;
-    background: #fafbff;
+    border: 1px solid #d9e0ee;
     border-radius: 10px;
-    padding: 13px 14px;
-    font: inherit;
-    font-size: 14px;
+    padding: 12px 14px;
+    background: #fbfcff;
+    color: var(--navy);
     outline: none;
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-    border-color: var(--purple);
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px #e8edff;
 }
 
-.form-card button { width: 100%; }
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.form-card .btn {
+    width: 100%;
+}
+
+.form-notice {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 13px;
+    text-align: center;
+}
+
+#formMessage {
+    display: none;
+    margin-top: 15px;
+    background: #edf8f4;
+    color: #23634b;
+    border-radius: 10px;
+    padding: 12px;
+    font-size: 13px;
+}
+
+/* CONTACT */
 
 .contact-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 50px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+    margin-top: 38px;
 }
 
-.contact h2 { font-size: 40px; }
-
-.contact-info {
-    display: flex;
-    gap: 17px;
-    padding: 18px 0;
-    border-bottom: 1px solid var(--border);
+.contact-card {
+    padding: 27px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: white;
 }
 
-.contact-icon {
-    width: 48px;
-    height: 48px;
-    background: #eeefff;
-    border-radius: 12px;
-    display: grid;
-    place-items: center;
-    font-size: 24px;
-    flex-shrink: 0;
+.contact-card .contact-icon {
+    font-size: 31px;
+    margin-bottom: 15px;
 }
 
-.contact-info strong { display: block; }
+.contact-card h3 {
+    font-size: 20px;
+    margin-bottom: 9px;
+}
 
-.contact-info a {
-    color: var(--blue);
+.contact-card p {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 15px;
     overflow-wrap: anywhere;
 }
 
-.map-wrap {
-    border-radius: 20px;
-    overflow: hidden;
-    min-height: 360px;
-    background: #edf1fa;
+.contact-card a {
+    color: var(--blue);
+    font-size: 14px;
+    font-weight: 800;
 }
 
-.map-wrap iframe {
-    height: 360px;
-    width: 100%;
-    border: 0;
-}
+/* FOOTER */
 
 footer {
-    background: #101937;
-    color: white;
-    padding: 60px 0 20px;
+    color: #d1daec;
+    background: #101f40;
+    padding: 60px 0 25px;
 }
 
 .footer-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr 1.5fr;
-    gap: 45px;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 50px;
 }
 
-footer h3 { font-size: 21px; }
+.footer-brand h3 {
+    color: white;
+    font-size: 26px;
+    margin-bottom: 10px;
+}
 
-footer p, footer a { color: #b7c1df; font-size: 14px; }
+.footer-brand p {
+    font-size: 14px;
+    max-width: 320px;
+}
 
-footer a {
+.footer-col h4 {
+    color: white;
+    margin-bottom: 17px;
+    font-size: 17px;
+}
+
+.footer-col a {
     display: block;
-    margin: 10px 0;
+    margin-bottom: 10px;
+    font-size: 14px;
 }
 
-footer a:hover { color: white; }
+.footer-col a:hover {
+    color: white;
+}
 
 .footer-bottom {
-    text-align: center;
-    border-top: 1px solid #ffffff25;
+    border-top: 1px solid #31405b;
     padding-top: 22px;
-    margin-top: 45px;
-    color: #a9b3d3;
-    font-size: 13px;
+    margin-top: 42px;
+    text-align: center;
+    font-size: 12px;
 }
 
-.toast {
-    position: fixed;
-    right: 25px;
-    bottom: 25px;
-    padding: 15px 22px;
-    background: var(--navy);
-    color: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px #0003;
-    z-index: 200;
-    display: none;
-    max-width: 340px;
-}
+/* RESPONSIVE */
 
-@media(max-width: 960px) {
-    .nav-links {
-        display: none;
-        position: absolute;
-        top: 78px;
-        left: 0;
-        right: 0;
-        background: white;
-        padding: 25px 6%;
-        flex-direction: column;
-        align-items: stretch;
-        box-shadow: 0 15px 20px #10193717;
-    }
-
-    .nav-links.active { display: flex; }
-    .menu-btn { display: block; }
-
-    .hero-grid, .about-grid,
-    .trial-grid, .contact-grid {
+@media (max-width: 950px) {
+    .hero-grid,
+    .why-grid,
+    .trial-grid {
         grid-template-columns: 1fr;
     }
 
-    .hero-panel { max-width: 570px; }
+    .hero-visual {
+        min-height: 400px;
+    }
 
-    .card-grid, .course-grid {
+    .subjects-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .courses-grid {
         grid-template-columns: repeat(2, 1fr);
     }
 
-    .subject-grid { grid-template-columns: repeat(3, 1fr); }
+    .navlinks {
+        gap: 15px;
+    }
 
-    .footer-grid { grid-template-columns: 1fr 1fr; }
+    .navlinks a {
+        font-size: 12px !important;
+    }
 }
 
-@media(max-width: 620px) {
-    section { padding: 65px 0; }
+@media (max-width: 700px) {
+    .section {
+        padding: 65px 0;
+    }
 
-    .hero { padding: 75px 0; }
-    .hero h1 { font-size: 47px; }
+    .navbar {
+        min-height: 72px;
+    }
 
-    .card-grid, .course-grid,
-    .subject-grid, .stats-grid,
-    .form-grid, .footer-grid {
+    .logo-name {
+        font-size: 17px;
+    }
+
+    .menu-toggle {
+        display: block;
+    }
+
+    .navlinks {
+        display: none;
+        position: absolute;
+        top: 72px;
+        left: 0;
+        right: 0;
+        padding: 23px 6%;
+        background: white;
+        border-bottom: 1px solid var(--border);
+        flex-direction: column;
+        align-items: stretch;
+        gap: 19px;
+        box-shadow: var(--shadow);
+    }
+
+    .navlinks.active {
+        display: flex;
+    }
+
+    .navlinks a {
+        font-size: 15px !important;
+    }
+
+    .hero {
+        padding: 68px 0 90px;
+    }
+
+    .hero h1 {
+        font-size: 45px;
+    }
+
+    .hero-visual {
+        min-height: 340px;
+    }
+
+    .visual-circle {
+        width: 250px;
+        height: 250px;
+    }
+
+    .visual-circle::before {
+        width: 278px;
+        height: 278px;
+    }
+
+    .book-icon {
+        font-size: 95px;
+    }
+
+    .floating-card {
+        padding: 10px 12px;
+    }
+
+    .floating-card strong {
+        font-size: 12px;
+    }
+
+    .floating-card small {
+        font-size: 10px;
+    }
+
+    .fc-one {
+        top: 8px;
+    }
+
+    .fc-two {
+        right: 0;
+        bottom: 16px;
+    }
+
+    .fc-three {
+        left: 2px;
+        bottom: 0;
+    }
+
+    .feature-grid,
+    .contact-grid,
+    .footer-grid {
         grid-template-columns: 1fr;
     }
 
-    .stats-grid { gap: 24px; }
-
-    .why-banner {
-        grid-template-columns: 1fr;
-        padding: 32px;
+    .subjects-grid,
+    .courses-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 
-    .about-copy h2,
-    .trial-copy h2 { font-size: 34px; }
+    .admission-grid {
+        grid-template-columns: 1fr;
+    }
 
-    .form-card { padding: 24px; }
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
 
-    .hero-panel { padding: 23px; }
+    .form-card {
+        padding: 25px;
+    }
+
+    .footer-grid {
+        gap: 25px;
+    }
+}
+
+@media (max-width: 420px) {
+    .subjects-grid,
+    .courses-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hero h1 {
+        font-size: 39px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *, *::before, *::after {
+        transition: none !important;
+    }
 }
 </style>
 </head>
 
 <body>
 
+<!-- NAVIGATION -->
+
 <header>
-    <div class="container nav">
-        <a href="#home" class="logo">
-            <div class="logo-icon">✦</div>
+    <nav class="navbar container">
+        <a href="#home" class="logo" aria-label="Neuroflex Education Home">
+            <div class="logo-mark">N</div>
             <div>
                 <div class="logo-name">NEUROFLEX <span>EDUCATION</span></div>
-                <span class="logo-tag">INSPIRE MINDS · EMPOWER FUTURES</span>
+                <div class="logo-tag">Inspire Minds. Empower Futures.</div>
             </div>
         </a>
 
-        <button class="menu-btn" id="menuBtn"
-                aria-label="Toggle navigation"
-                aria-expanded="false">☰</button>
+        <button class="menu-toggle" id="menuToggle"
+                aria-label="Toggle menu" aria-expanded="false"
+                aria-controls="navlinks">☰</button>
 
-        <nav class="nav-links" id="navLinks">
+        <div class="navlinks" id="navlinks">
             <a href="#home">Home</a>
-            <a href="#about">About</a>
+            <a href="#about">About Us</a>
             <a href="#subjects">Subjects</a>
             <a href="#courses">Courses</a>
-            <a href="#why">Why Us</a>
             <a href="#contact">Contact</a>
-            <a href="#trial" class="nav-cta">Apply Now</a>
-        </nav>
-    </div>
+            <a href="#trial" class="btn btn-primary">Free Trial Class ↗</a>
+        </div>
+    </nav>
 </header>
 
 <main>
 
+<!-- HERO SECTION -->
+
 <section class="hero" id="home">
     <div class="container hero-grid">
-        <div>
-            <span class="hero-pill">🎓 An English Medium Institute</span>
+        <div class="hero-content">
+            <span class="eyebrow">✦ AN ENGLISH MEDIUM INSTITUTE</span>
 
-            <h1>Inspire Minds.<br>
-                <span>Empower Futures.</span></h1>
+            <h1>
+                Inspire Minds.<br>
+                <span class="gradient-text">Empower Futures.</span>
+            </h1>
 
             <p>
-                Welcome to Neuroflex Education, where expert teachers,
-                focused lessons and a supportive learning environment
-                help students build confidence and achieve their goals.
+                Welcome to Neuroflex Education, where we support
+                students in building strong academic foundations
+                through focused lessons, experienced teachers,
+                and a supportive learning environment.
             </p>
 
             <div class="hero-actions">
-                <a class="btn btn-white" href="#trial">Book Free Trial Classes</a>
-                <a class="btn btn-outline" href="#courses">Explore Courses</a>
+                <a href="#trial" class="btn btn-primary">
+                    Get 2 Free Trial Classes ↗
+                </a>
+                <a href="#courses" class="btn btn-outline">
+                    Explore Our Courses
+                </a>
+            </div>
+
+            <div class="hero-note">
+                ✓ Admissions Open &nbsp; ✓ English Medium Curriculum
             </div>
         </div>
 
-        <div class="hero-panel">
-            <h3>Admissions Are Open!</h3>
-            <p>Start your learning journey with Neuroflex Education.</p>
-
-            <div class="hero-feature">
-                <div class="feature-icon">📘</div>
-                Cambridge &amp; Pearson Edexcel curriculum support
+        <div class="hero-visual">
+            <div class="visual-circle">
+                <div class="book-icon" role="img" aria-label="Books">📚</div>
             </div>
 
-            <div class="hero-feature">
-                <div class="feature-icon">👩‍🏫</div>
-                Experienced English Medium teachers
+            <div class="floating-card fc-one">
+                <strong>🎓 Expert Teachers</strong>
+                <small>Professional educators</small>
             </div>
 
-            <div class="hero-feature">
-                <div class="feature-icon">🌟</div>
-                Modern facilities and student activities
+            <div class="floating-card fc-two">
+                <strong>⭐ O Level & A Level</strong>
+                <small>Academic preparation</small>
             </div>
 
-            <div class="hero-feature">
-                <div class="feature-icon">🎁</div>
-                Sign up for 2 free trial classes
+            <div class="floating-card fc-three">
+                <strong>✓ Supportive Learning</strong>
+                <small>Focused lessons</small>
             </div>
         </div>
     </div>
 </section>
 
-<div class="stats">
-    <div class="container stats-grid">
-        <div class="stat">Pre-O · O · A Level
-            <small>Academic preparation</small>
+<!-- FEATURES -->
+
+<div class="features" id="about">
+    <div class="container feature-grid">
+
+        <div class="feature">
+            <div class="feature-icon">👩‍🏫</div>
+            <h3>Expert Teachers</h3>
+            <p>
+                Learn from dedicated educators with English Medium
+                backgrounds and strong curriculum knowledge.
+            </p>
         </div>
-        <div class="stat">Cambridge &amp; Edexcel
-            <small>Curriculum-focused teaching</small>
+
+        <div class="feature">
+            <div class="feature-icon">🏫</div>
+            <h3>Modern Facilities</h3>
+            <p>
+                A learning space designed to support concentration,
+                participation, and academic development.
+            </p>
         </div>
-        <div class="stat">PTE &amp; IELTS
-            <small>English language preparation</small>
+
+        <div class="feature">
+            <div class="feature-icon">🚀</div>
+            <h3>Student Activities</h3>
+            <p>
+                Engaging academic activities and a supportive
+                environment to encourage student growth.
+            </p>
         </div>
+
     </div>
 </div>
 
-<section id="about">
-    <div class="container about-grid">
-        <div class="about-graphic">
-            <div class="big-symbol">🎓</div>
-            <h3>Learn. Grow. Excel.</h3>
-            <p>
-                Quality English Medium education in a supportive
-                environment.
+<!-- SUBJECTS -->
+
+<section class="section subjects-section" id="subjects">
+    <div class="container">
+
+        <div class="center">
+            <div class="section-label">WHAT WE TEACH</div>
+            <h2 class="section-heading">
+                Explore Our <span class="gradient-text">Subjects</span>
+            </h2>
+            <p class="section-desc">
+                Discover our range of English Medium subjects
+                covering science, mathematics, technology,
+                languages, and commerce.
             </p>
         </div>
 
-        <div class="about-copy">
-            <span class="eyebrow">About Neuroflex</span>
-            <h2>Education That Helps You Move Forward</h2>
+        <div class="subjects-grid">
 
-            <p>
-                Neuroflex Education is an English Medium institute
-                located in Banasree, Dhaka.
-            </p>
+            <div class="subject-card">
+                <span class="subject-icon">📖</span>
+                <span>English</span>
+            </div>
 
-            <p>
-                Our team consists of expert teachers skilled in
-                delivering focused, effective lessons. Our instructors
-                come from English Medium educational backgrounds,
-                bringing knowledge of curriculum, grammar and
-                classroom expectations.
-            </p>
+            <div class="subject-card">
+                <span class="subject-icon">⚛️</span>
+                <span>Physics</span>
+            </div>
 
-            <ul class="check-list">
-                <li>Focused and effective lessons</li>
-                <li>Teachers with English Medium backgrounds</li>
-                <li>Support tailored to students' school standards</li>
-                <li>A supportive learning environment</li>
-            </ul>
+            <div class="subject-card">
+                <span class="subject-icon">🧪</span>
+                <span>Chemistry</span>
+            </div>
 
-            <a href="#contact" class="btn btn-primary">Get in Touch</a>
+            <div class="subject-card">
+                <span class="subject-icon">🧬</span>
+                <span>Biology</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">📐</span>
+                <span>Add / Pure Math</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">🔢</span>
+                <span>Math-B / Math-D</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">💻</span>
+                <span>CS / ICT / IT</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">💼</span>
+                <span>Business</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">📊</span>
+                <span>Economics</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">🧮</span>
+                <span>Accounting</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">🇧🇩</span>
+                <span>Bangla</span>
+            </div>
+
+            <div class="subject-card">
+                <span class="subject-icon">🫀</span>
+                <span>Human Biology</span>
+            </div>
+
         </div>
     </div>
 </section>
 
-<section class="bg-light" id="why">
+<!-- COURSES -->
+
+<section class="section" id="courses">
     <div class="container">
-        <div class="section-head">
-            <span class="eyebrow">Why Choose Us</span>
-            <h2>What Makes Neuroflex Different?</h2>
-            <p>
-                We focus on helping every student learn through
-                experienced teaching and meaningful support.
+
+        <div class="center">
+            <div class="section-label">OUR PROGRAMS</div>
+            <h2 class="section-heading">
+                Courses for Every <span class="gradient-text">Learning Goal</span>
+            </h2>
+            <p class="section-desc">
+                From early academic preparation to international
+                qualifications and English language tests,
+                explore the programs offered at Neuroflex Education.
             </p>
         </div>
 
-        <div class="card-grid">
-            <div class="card">
-                <div class="card-icon">👨‍🏫</div>
-                <h3>Senior Mentors</h3>
-                <p>
-                    Authoritative academic guidance from veteran
-                    teachers with extensive classroom experience.
-                </p>
-            </div>
+        <div class="courses-grid">
 
-            <div class="card">
-                <div class="card-icon">📚</div>
-                <h3>English Medium Core</h3>
-                <p>
-                    Expert instruction tailored to students'
-                    English Medium school standards and curricula.
-                </p>
-            </div>
-
-            <div class="card">
-                <div class="card-icon">🏅</div>
-                <h3>Professional Experts</h3>
-                <p>
-                    Dedicated career educators with proven
-                    classroom teaching experience.
-                </p>
-            </div>
-
-            <div class="card">
-                <div class="card-icon">🏫</div>
-                <h3>Modern Facilities</h3>
-                <p>
-                    A learning setting designed to support focused
-                    study and productive lessons.
-                </p>
-            </div>
-
-            <div class="card">
-                <div class="card-icon">🤝</div>
-                <h3>Supportive Environment</h3>
-                <p>
-                    An encouraging atmosphere where students can
-                    ask questions and develop confidence.
-                </p>
-            </div>
-
-            <div class="card">
-                <div class="card-icon">🎨</div>
-                <h3>Student Activities</h3>
-                <p>
-                    Exciting student activities that complement
-                    classroom learning and engagement.
-                </p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section id="subjects">
-    <div class="container">
-        <div class="section-head">
-            <span class="eyebrow">Our Subjects</span>
-            <h2>Explore What You Can Learn</h2>
-            <p>
-                Academic support across science, mathematics,
-                languages, technology and commerce.
-            </p>
-        </div>
-
-        <div class="subject-grid">
-            <div class="subject"><span>✓</span> English</div>
-            <div class="subject"><span>✓</span> Physics</div>
-            <div class="subject"><span>✓</span> Chemistry</div>
-            <div class="subject"><span>✓</span> Biology</div>
-            <div class="subject"><span>✓</span> Add / Pure Math</div>
-            <div class="subject"><span>✓</span> Math-B / Math-D</div>
-            <div class="subject"><span>✓</span> CS / ICT / IT</div>
-            <div class="subject"><span>✓</span> Business</div>
-            <div class="subject"><span>✓</span> Economics</div>
-            <div class="subject"><span>✓</span> Accounting</div>
-            <div class="subject"><span>✓</span> Bangla</div>
-            <div class="subject"><span>✓</span> Human Biology</div>
-        </div>
-    </div>
-</section>
-
-<section class="bg-light" id="courses">
-    <div class="container">
-        <div class="section-head">
-            <span class="eyebrow">Our Courses</span>
-            <h2>Find Your Learning Path</h2>
-            <p>
-                Choose the preparation programme that matches
-                your academic or language-learning goals.
-            </p>
-        </div>
-
-        <div class="course-grid">
-            <div class="course">
-                <div class="course-symbol">📗</div>
+            <div class="course-card">
+                <div class="course-badge">🌱</div>
                 <h3>Pre-O Level</h3>
                 <p>
-                    Build a strong foundation in core subjects
-                    before progressing to O Level studies.
+                    Foundation preparation to help students develop
+                    subject knowledge before entering O Level.
                 </p>
-                <a href="#trial">Enquire Now →</a>
+                <a href="#trial" data-course="Pre-O Level">
+                    Enquire Now →
+                </a>
             </div>
 
-            <div class="course">
-                <div class="course-symbol">📘</div>
+            <div class="course-card">
+                <div class="course-badge">📘</div>
                 <h3>O Level</h3>
                 <p>
-                    Subject-based academic preparation with
-                    a focus on understanding and exam readiness.
+                    Subject-focused academic preparation aligned
+                    with English Medium O Level studies.
                 </p>
-                <a href="#trial">Enquire Now →</a>
+                <a href="#trial" data-course="O Level">
+                    Enquire Now →
+                </a>
             </div>
 
-            <div class="course">
-                <div class="course-symbol">🎓</div>
+            <div class="course-card">
+                <div class="course-badge">🎓</div>
                 <h3>A Level</h3>
                 <p>
-                    Advanced subject preparation supporting
-                    higher-level academic learning.
+                    Advanced subject preparation to support
+                    students working towards A Level qualifications.
                 </p>
-                <a href="#trial">Enquire Now →</a>
+                <a href="#trial" data-course="A Level">
+                    Enquire Now →
+                </a>
             </div>
 
-            <div class="course">
-                <div class="course-symbol">🌐</div>
+            <div class="course-card">
+                <div class="course-badge">🌍</div>
                 <h3>PTE</h3>
                 <p>
-                    English language test preparation for
-                    students planning their next steps.
+                    English language test preparation for students
+                    planning international education opportunities.
                 </p>
-                <a href="#trial">Enquire Now →</a>
+                <a href="#trial" data-course="PTE">
+                    Enquire Now →
+                </a>
             </div>
 
-            <div class="course">
-                <div class="course-symbol">🗣️</div>
+            <div class="course-card">
+                <div class="course-badge">🗣️</div>
                 <h3>Online IELTS</h3>
                 <p>
-                    IELTS preparation delivered through
-                    online learning sessions.
+                    Online preparation for IELTS covering English
+                    language skills and examination practice.
                 </p>
-                <a href="#trial">Enquire Now →</a>
+                <a href="#trial" data-course="Online IELTS">
+                    Enquire Now →
+                </a>
             </div>
 
-            <div class="course">
-                <div class="course-symbol">✨</div>
-                <h3>Trial Classes</h3>
+            <div class="course-card">
+                <div class="course-badge">🤝</div>
+                <h3>Need Guidance?</h3>
                 <p>
-                    Experience the teaching environment
-                    before making an enrolment decision.
+                    Not sure which course or subject is right
+                    for you? Contact our team for information.
                 </p>
-                <a href="#trial">Register Now →</a>
+                <a href="#contact">
+                    Contact Us →
+                </a>
             </div>
+
         </div>
 
-        <p style="text-align:center;color:var(--muted);margin-top:26px;font-size:13px">
-            Curriculum support: Cambridge International Education
-            and Pearson Edexcel.
-        </p>
+        <div class="curriculum">
+            <strong>Academic Curricula:</strong>
+            Cambridge International Education and
+            Pearson Edexcel
+        </div>
+
     </div>
 </section>
 
-<section>
-    <div class="container">
-        <div class="why-banner">
-            <div>
-                <h2>Ready to Excel?</h2>
-                <p>
-                    Admissions are open. Sign up for 2 free trial classes
-                    and experience Neuroflex Education.
-                </p>
-            </div>
-            <a href="#trial" class="btn btn-white">Register for Free</a>
-        </div>
-    </div>
-</section>
+<!-- WHY CHOOSE US -->
 
-<section class="trial" id="trial">
-    <div class="container trial-grid">
-        <div class="trial-copy">
-            <span class="eyebrow">Admissions Open</span>
-            <h2>Take the First Step Towards Your Future</h2>
+<section class="section why-section" id="why">
+    <div class="container why-grid">
+
+        <div class="why-art">
+            <div class="big-icon">🎓</div>
+            <h3>Learn. Grow. Excel.</h3>
             <p>
-                Interested in joining Neuroflex Education?
-                Complete the form and our team can discuss
-                suitable courses and trial classes with you.
+                Focused education and guidance
+                to help students work towards
+                their academic goals.
+            </p>
+        </div>
+
+        <div class="why-content">
+            <div class="section-label">THE NEUROFLEX DIFFERENCE</div>
+
+            <h2 class="section-heading">
+                Why Choose
+                <span class="gradient-text">Neuroflex Education?</span>
+            </h2>
+
+            <p class="section-desc">
+                Our approach combines experienced educators,
+                focused instruction, and a learning environment
+                that encourages student progress.
             </p>
 
-            <div class="trial-offer">
-                <strong>🎁 2 Free Trial Classes</strong>
-                <p style="color:#eae9ff;margin-bottom:0">
-                    Register your interest to avail the
-                    trial-class offer advertised in our leaflet.
-                    Availability is subject to confirmation.
-                </p>
+            <div class="why-list">
+
+                <div class="why-item">
+                    <div class="check">✓</div>
+                    <div>
+                        <h3>Senior Mentors</h3>
+                        <p>
+                            Guidance from experienced teachers
+                            with classroom teaching expertise.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="why-item">
+                    <div class="check">✓</div>
+                    <div>
+                        <h3>English Medium Core</h3>
+                        <p>
+                            Instruction designed around English
+                            Medium school standards and curriculum.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="why-item">
+                    <div class="check">✓</div>
+                    <div>
+                        <h3>Professional Educators</h3>
+                        <p>
+                            Dedicated career teachers with
+                            experience delivering classroom lessons.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="why-item">
+                    <div class="check">✓</div>
+                    <div>
+                        <h3>Supportive Learning Environment</h3>
+                        <p>
+                            A positive environment that encourages
+                            participation, confidence and learning.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="why-item">
+                    <div class="check">✓</div>
+                    <div>
+                        <h3>Focused, Effective Lessons</h3>
+                        <p>
+                            Subject-specific teaching intended to
+                            improve understanding and academic readiness.
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ADMISSION -->
+
+<section class="admission" id="admission">
+    <div class="container admission-grid">
+        <div>
+            <div style="font-size:13px;font-weight:800;letter-spacing:2px;">
+                YOUR LEARNING JOURNEY STARTS HERE
             </div>
 
-            <p style="margin-top:25px">
-                Prefer to speak with us directly?
-                <br>
-                <strong>
-                    <a href="tel:+8801845440528">
-                        +880 1845-440528
-                    </a>
-                </strong>
+            <h2>Admissions Are Now Open!</h2>
+
+            <p>
+                Take the next step towards your academic goals
+                with Neuroflex Education.
             </p>
+
+            <div class="offer">
+                🎁 Bring the original leaflet to avail available offers.
+            </div>
+        </div>
+
+        <a href="#trial" class="btn btn-white">
+            Register for Free Trial ↗
+        </a>
+    </div>
+</section>
+
+<!-- FREE TRIAL -->
+
+<section class="section trial-section" id="trial">
+    <div class="container trial-grid">
+
+        <div class="trial-info">
+            <div class="section-label">GET STARTED FOR FREE</div>
+
+            <h2 class="section-heading">
+                Sign Up for
+                <span class="gradient-text">2 Free Trial Classes!</span>
+            </h2>
+
+            <p class="section-desc">
+                Interested in studying with us?
+                Request information about your two free trial classes.
+                Complete the form and send the enquiry through
+                your email application.
+            </p>
+
+            <div class="trial-points">
+                <div class="trial-point">
+                    <span>✓</span>
+                    Experience our teaching approach.
+                </div>
+
+                <div class="trial-point">
+                    <span>✓</span>
+                    Learn more about your preferred subjects.
+                </div>
+
+                <div class="trial-point">
+                    <span>✓</span>
+                    Explore the learning environment.
+                </div>
+
+                <div class="trial-point">
+                    <span>✓</span>
+                    Discuss course options with the institute.
+                </div>
+            </div>
         </div>
 
         <div class="form-card">
-            <h3>Trial Class Registration</h3>
-            <p style="color:var(--muted);font-size:14px">
-                Fill in your details to register your interest.
-            </p>
+            <h3>Request Your Free Trial</h3>
 
-            <form id="registrationForm">
-                <div class="form-grid">
+            <form id="trialForm">
+
+                <div class="form-row">
                     <div class="form-group">
-                        <label for="student">Student's Name *</label>
-                        <input id="student" name="student"
-                               placeholder="Full name"
-                               required maxlength="100">
+                        <label for="studentName">Student Name *</label>
+                        <input id="studentName" name="studentName"
+                               type="text" placeholder="Full name"
+                               autocomplete="name" maxlength="100" required>
                     </div>
 
                     <div class="form-group">
-                        <label for="guardian">Parent / Guardian</label>
-                        <input id="guardian" name="guardian"
-                               placeholder="Guardian's name"
-                               maxlength="100">
+                        <label for="phone">Contact Number *</label>
+                        <input id="phone" name="phone"
+                               type="tel" placeholder="+880..."
+                               autocomplete="tel" maxlength="30" required>
                     </div>
                 </div>
 
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="phone">Phone Number *</label>
-                        <input id="phone" name="phone" type="tel"
-                               placeholder="+880..."
-                               required maxlength="25">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="email">Email Address</label>
-                        <input id="email" name="email" type="email"
-                               placeholder="example@email.com"
-                               maxlength="150">
-                    </div>
-                </div>
-
-                <div class="form-grid">
+                <div class="form-row">
                     <div class="form-group">
                         <label for="course">Select Course *</label>
                         <select id="course" name="course" required>
@@ -1152,7 +1484,7 @@ footer a:hover { color: white; }
                     <div class="form-group">
                         <label for="subject">Preferred Subject</label>
                         <select id="subject" name="subject">
-                            <option value="">Choose a subject</option>
+                            <option value="">Select a subject</option>
                             <option>English</option>
                             <option>Physics</option>
                             <option>Chemistry</option>
@@ -1165,151 +1497,145 @@ footer a:hover { color: white; }
                             <option>Accounting</option>
                             <option>Bangla</option>
                             <option>Human Biology</option>
-                            <option>Other / Not Sure</option>
                         </select>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="message">Additional Message</label>
-                    <textarea id="message" name="message"
-                              rows="4" maxlength="1000"
-                              placeholder="Tell us anything we should know..."></textarea>
+                    <label for="email">Email Address *</label>
+                    <input id="email" name="email" type="email"
+                           placeholder="you@example.com"
+                           autocomplete="email" maxlength="254" required>
                 </div>
 
-                <button type="submit" class="btn btn-primary">
-                    Submit Registration
+                <div class="form-group">
+                    <label for="message">Additional Information</label>
+                    <textarea id="message" name="message"
+                              rows="4" maxlength="1000"
+                              placeholder="Tell us about your learning needs..."></textarea>
+                </div>
+
+                <button class="btn btn-primary" type="submit">
+                    Prepare Trial Class Enquiry ↗
                 </button>
 
-                <p style="font-size:12px;color:var(--muted);margin-top:15px">
-                    Your details are submitted to this website's server.
-                    The institute must confirm your registration separately.
+                <div id="formMessage" role="status"></div>
+
+                <p class="form-notice">
+                    Submitting opens your email application.
+                    You must send the prepared email to complete your enquiry.
+                    No information is stored on this website.
                 </p>
+
             </form>
         </div>
     </div>
 </section>
 
-<section class="contact" id="contact">
+<!-- CONTACT -->
+
+<section class="section" id="contact">
     <div class="container">
-        <div class="section-head">
-            <span class="eyebrow">Contact Us</span>
-            <h2>We Would Love to Hear From You</h2>
-            <p>
-                Contact Neuroflex Education for course enquiries,
-                admissions and trial-class information.
+
+        <div class="center">
+            <div class="section-label">GET IN TOUCH</div>
+            <h2 class="section-heading">
+                Contact <span class="gradient-text">Neuroflex Education</span>
+            </h2>
+            <p class="section-desc">
+                Have questions about admissions, courses, or trial classes?
+                Contact us or visit our institute in Banasree, Dhaka.
             </p>
         </div>
 
         <div class="contact-grid">
-            <div>
-                <h2>Visit Our Institute</h2>
 
-                <div class="contact-info">
-                    <div class="contact-icon">📍</div>
-                    <div>
-                        <strong>Address</strong>
-                        Ground Floor, House 15, Road 3,<br>
-                        Block B, Banasree, Dhaka 1219,
-                        Bangladesh
-                    </div>
-                </div>
-
-                <div class="contact-info">
-                    <div class="contact-icon">📞</div>
-                    <div>
-                        <strong>Phone</strong>
-                        <a href="tel:+8801845440528">
-                            +880 1845-440528
-                        </a>
-                    </div>
-                </div>
-
-                <div class="contact-info">
-                    <div class="contact-icon">✉️</div>
-                    <div>
-                        <strong>Email</strong>
-                        <a href="mailto:neuroflexed@gmail.com">
-                            neuroflexed@gmail.com
-                        </a>
-                    </div>
-                </div>
-
-                <div class="contact-info">
-                    <div class="contact-icon">📱</div>
-                    <div>
-                        <strong>Follow Us</strong>
-                        <a href="https://www.facebook.com/neuroflexed"
-                           target="_blank" rel="noopener noreferrer">
-                            Facebook: neuroflexed
-                        </a>
-                        <a href="https://www.instagram.com/neuroflexed"
-                           target="_blank" rel="noopener noreferrer">
-                            Instagram: neuroflexed
-                        </a>
-                    </div>
-                </div>
-
-                <a class="btn btn-primary"
-                   style="margin-top:25px"
-                   href="https://www.google.com/maps/search/?api=1&query=House+15+Road+3+Block+B+Banasree+Dhaka+1219"
-                   target="_blank" rel="noopener noreferrer">
-                    Get Directions
+            <div class="contact-card">
+                <div class="contact-icon">📞</div>
+                <h3>Call Us</h3>
+                <p>Speak with our team for admission and course enquiries.</p>
+                <a href="tel:+8801845440528">
+                    +880 1845-440528 →
                 </a>
             </div>
 
-            <div class="map-wrap">
-                <iframe
-                    title="Neuroflex Education location"
-                    src="https://www.google.com/maps?q=House%2015%20Road%203%20Block%20B%20Banasree%20Dhaka%201219&output=embed"
-                    loading="lazy"
-                    referrerpolicy="no-referrer-when-downgrade">
-                </iframe>
+            <div class="contact-card">
+                <div class="contact-icon">✉️</div>
+                <h3>Email Us</h3>
+                <p>Send us your questions about classes and enrollment.</p>
+                <a href="mailto:neuroflexed@gmail.com">
+                    neuroflexed@gmail.com →
+                </a>
             </div>
+
+            <div class="contact-card">
+                <div class="contact-icon">📍</div>
+                <h3>Visit Our Institute</h3>
+                <p>
+                    Ground Floor, House-15, Road-3,
+                    Block-B, Banasree, Dhaka-1219,
+                    Bangladesh.
+                </p>
+
+                <a href="https://www.google.com/maps/search/?api=1&query=Neuroflex+Education+Banasree+Dhaka"
+                   target="_blank" rel="noopener noreferrer">
+                    View on Google Maps →
+                </a>
+            </div>
+
         </div>
     </div>
 </section>
 
 </main>
 
+<!-- FOOTER -->
+
 <footer>
     <div class="container">
+
         <div class="footer-grid">
-            <div>
+            <div class="footer-brand">
                 <h3>NEUROFLEX EDUCATION</h3>
-                <p>Inspire Minds. Empower Futures.</p>
                 <p>
-                    An English Medium institute offering
-                    academic support and English language
-                    preparation in Banasree, Dhaka.
+                    Inspire Minds. Empower Futures.
+                </p>
+                <p>
+                    An English Medium Institute in Banasree,
+                    Dhaka, offering academic and English
+                    language test preparation.
                 </p>
             </div>
 
-            <div>
-                <h3>Quick Links</h3>
+            <div class="footer-col">
+                <h4>Quick Links</h4>
+                <a href="#home">Home</a>
                 <a href="#about">About Us</a>
-                <a href="#subjects">Our Subjects</a>
+                <a href="#subjects">Subjects</a>
                 <a href="#courses">Courses</a>
                 <a href="#trial">Free Trial Classes</a>
-                <a href="#contact">Contact</a>
             </div>
 
-            <div>
-                <h3>Contact Information</h3>
-                <p>
-                    House 15, Road 3, Block B,<br>
-                    Banasree, Dhaka 1219
-                </p>
-                <a href="tel:+8801845440528">
-                    +880 1845-440528
-                </a>
-                <a href="mailto:neuroflexed@gmail.com">
-                    neuroflexed@gmail.com
-                </a>
+            <div class="footer-col">
+                <h4>Follow Us</h4>
+
                 <a href="https://www.facebook.com/neuroflexed"
-                   target="_blank" rel="noopener noreferrer">Facebook</a>
+                   target="_blank" rel="noopener noreferrer">
+                    Facebook ↗
+                </a>
+
                 <a href="https://www.instagram.com/neuroflexed"
-                   target="_blank" rel="noopener noreferrer">Instagram</a>
+                   target="_blank" rel="noopener noreferrer">
+                    Instagram ↗
+                </a>
+
+                <a href="mailto:neuroflexed@gmail.com">
+                    Email Us ↗
+                </a>
+
+                <a href="tel:+8801845440528">
+                    Call Us ↗
+                </a>
             </div>
         </div>
 
@@ -1317,80 +1643,95 @@ footer a:hover { color: white; }
             © <span id="year"></span> Neuroflex Education.
             All Rights Reserved.
         </div>
+
     </div>
 </footer>
 
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
-
 <script>
-const menuBtn = document.getElementById("menuBtn");
-const navLinks = document.getElementById("navLinks");
+// CURRENT YEAR
+document.getElementById("year").textContent = new Date().getFullYear();
 
-menuBtn.addEventListener("click", () => {
-    const active = navLinks.classList.toggle("active");
-    menuBtn.setAttribute("aria-expanded", String(active));
-    menuBtn.textContent = active ? "✕" : "☰";
+// MOBILE NAVIGATION
+const menuToggle = document.getElementById("menuToggle");
+const navlinks = document.getElementById("navlinks");
+
+menuToggle.addEventListener("click", function () {
+    const opened = navlinks.classList.toggle("active");
+    menuToggle.setAttribute("aria-expanded", String(opened));
+    menuToggle.textContent = opened ? "✕" : "☰";
 });
 
-navLinks.querySelectorAll("a").forEach(link => {
-    link.addEventListener("click", () => {
-        navLinks.classList.remove("active");
-        menuBtn.setAttribute("aria-expanded", "false");
-        menuBtn.textContent = "☰";
+document.querySelectorAll(".navlinks a").forEach(function (link) {
+    link.addEventListener("click", function () {
+        navlinks.classList.remove("active");
+        menuToggle.setAttribute("aria-expanded", "false");
+        menuToggle.textContent = "☰";
     });
 });
 
-document.getElementById("year").textContent =
-    new Date().getFullYear();
+// AUTOMATIC COURSE SELECTION
+document.querySelectorAll("[data-course]").forEach(function (link) {
+    link.addEventListener("click", function () {
+        document.getElementById("course").value =
+            this.getAttribute("data-course");
+    });
+});
 
-const form = document.getElementById("registrationForm");
-const toast = document.getElementById("toast");
+// TRIAL ENQUIRY FORM
+// Uses mailto, so the visitor's email app handles sending.
+// This website does not claim that an enquiry was sent automatically.
+document.getElementById("trialForm").addEventListener(
+    "submit",
+    function (event) {
+        event.preventDefault();
 
-function showToast(message) {
-    toast.textContent = message;
-    toast.style.display = "block";
-    setTimeout(() => {
-        toast.style.display = "none";
-    }, 5000);
-}
-
-form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const submitButton = form.querySelector("button[type=submit]");
-    const formData = new FormData(form);
-    const data = new URLSearchParams(formData);
-
-    submitButton.disabled = true;
-    submitButton.textContent = "Submitting...";
-
-    try {
-        const response = await fetch("/register", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: data.toString()
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.message || "Registration failed.");
+        if (!this.reportValidity()) {
+            return;
         }
 
-        form.reset();
-        showToast(
-            "Your registration enquiry was saved successfully. " +
-            "Please contact the institute to confirm your classes."
-        );
-    } catch (error) {
-        showToast(error.message || "Unable to submit the form.");
-    } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = "Submit Registration";
+        const name = document.getElementById("studentName").value.trim();
+        const phone = document.getElementById("phone").value.trim();
+        const email = document.getElementById("email").value.trim();
+        const course = document.getElementById("course").value;
+        const subject = document.getElementById("subject").value;
+        const message = document.getElementById("message").value.trim();
+
+        const subjectLine = "Free Trial Class Enquiry - " + name;
+
+        const body = [
+            "Hello Neuroflex Education,",
+            "",
+            "I would like to enquire about the two free trial classes.",
+            "",
+            "Student Name: " + name,
+            "Contact Number: " + phone,
+            "Email: " + email,
+            "Course: " + course,
+            "Preferred Subject: " + (subject || "Not specified"),
+            "",
+            "Additional Information:",
+            message || "None",
+            "",
+            "Please contact me with the available trial class details.",
+            "",
+            "Thank you."
+        ].join("\n");
+
+        const mailto =
+            "mailto:neuroflexed@gmail.com" +
+            "?subject=" + encodeURIComponent(subjectLine) +
+            "&body=" + encodeURIComponent(body);
+
+        const notice = document.getElementById("formMessage");
+        notice.style.display = "block";
+        notice.textContent =
+            "Your email application should open with the enquiry. " +
+            "Please click Send in your email application. " +
+            "If it does not open, contact neuroflexed@gmail.com directly.";
+
+        window.location.href = mailto;
     }
-});
+);
 </script>
 
 </body>
@@ -1398,128 +1739,45 @@ form.addEventListener("submit", async (event) => {
 """
 
 
-class NeuroflexHandler(BaseHTTPRequestHandler):
-
-    def send_content(self, content, status=200, content_type="text/html"):
-        encoded = content.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", content_type + "; charset=utf-8")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
-
-    def send_json(self, success, message, status=200):
-        import json
-        payload = json.dumps({
-            "success": success,
-            "message": message
-        })
-        self.send_content(payload, status, "application/json")
+class WebsiteHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
-            self.send_content(HTML)
+            content = HTML.encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
+        elif self.path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+
         else:
-            self.send_content("<h1>404 - Page Not Found</h1>", 404)
+            self.send_error(404, "Page not found")
 
-    def do_POST(self):
-        if self.path != "/register":
-            self.send_json(False, "Unknown endpoint.", 404)
-            return
 
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-
-            if length <= 0 or length > 10000:
-                self.send_json(False, "Invalid form size.", 400)
-                return
-
-            body = self.rfile.read(length).decode("utf-8")
-            params = parse_qs(body, keep_blank_values=True)
-
-            def get_value(key, limit=100):
-                return params.get(key, [""])[0].strip()[:limit]
-
-            student = get_value("student")
-            guardian = get_value("guardian")
-            phone = get_value("phone", 25)
-            email = get_value("email", 150)
-            course = get_value("course")
-            subject = get_value("subject")
-            message = get_value("message", 1000)
-
-            valid_courses = {
-                "Pre-O Level", "O Level", "A Level",
-                "PTE", "Online IELTS"
-            }
-
-            if not student or not phone or course not in valid_courses:
-                self.send_json(
-                    False,
-                    "Please enter your name, phone and a valid course.",
-                    400
-                )
-                return
-
-            if len(phone) < 7:
-                self.send_json(False, "Enter a valid phone number.", 400)
-                return
-
-            # Prevent spreadsheet formula execution when CSV is opened.
-            def csv_safe(value):
-                if value and value[0] in ("=", "+", "-", "@"):
-                    return "'" + value
-                return value
-
-            row = [
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                student, guardian, phone, email,
-                course, subject, message
-            ]
-
-            headers = [
-                "Date", "Student", "Guardian", "Phone",
-                "Email", "Course", "Subject", "Message"
-            ]
-
-            file_exists = os.path.exists(CSV_FILE)
-
-            with open(CSV_FILE, "a", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-
-                if not file_exists or os.path.getsize(CSV_FILE) == 0:
-                    writer.writerow(headers)
-
-                writer.writerow([csv_safe(str(value)) for value in row])
-
-            print(f"New registration: {escape(student)} | {course}")
-
-            self.send_json(
-                True,
-                "Registration enquiry saved successfully."
-            )
-
-        except (ValueError, UnicodeDecodeError):
-            self.send_json(False, "Invalid request.", 400)
-
-        except OSError:
-            self.send_json(False, "Unable to save registration.", 500)
+def open_website():
+    webbrowser.open(f"http://localhost:{PORT}")
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("127.0.0.1", PORT), NeuroflexHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), WebsiteHandler)
 
     print("=" * 55)
-    print("     NEUROFLEX EDUCATION WEBSITE")
+    print("NEUROFLEX EDUCATION WEBSITE")
     print("=" * 55)
     print(f"Website: http://localhost:{PORT}")
-    print("Registration data: registrations.csv")
     print("Press Ctrl+C to stop the server.")
     print("=" * 55)
+
+    threading.Timer(1.0, open_website).start()
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nServer stopped.")
+        print("\nWebsite server stopped.")
     finally:
         server.server_close()
